@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Card Hand Viewer - iPhone Friendly</title>
+<style>
+  /* Paste updated CSS here (from step 2) */
+  body {
+    background: #f9f7f7;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 10px;
+    color: #4a4a4a;
+    min-height: 100vh;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  h1 {
+    margin-bottom: 30px;
+    color: #6b5b95;
+    font-size: 2.2rem;
+    text-align: center;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  .input-container {
+    background: #fff0f5;
+    border-radius: 25px;
+    padding: 20px 30px;
+    box-shadow: 0 6px 15px rgba(107, 91, 149, 0.25);
+    max-width: 480px;
+    width: 90vw;
+    margin-bottom: 40px;
+  }
+
+  input[type="number"] {
+    width: 100%;
+    padding: 18px 22px;
+    font-size: 1.8rem;
+    border: 2.5px solid #d8bfd8;
+    border-radius: 20px;
+    outline: none;
+    transition: border-color 0.3s ease;
+    box-sizing: border-box;
+  }
+
+  input[type="number"]:focus {
+    border-color: #6b5b95;
+    box-shadow: 0 0 12px #cdb4db;
+  }
+
+  .error {
+    color: #d9534f;
+    font-size: 1.1rem;
+    margin-top: 10px;
+    height: 22px;
+    min-height: 22px;
+  }
+
+  .cards-container {
+    display: flex;
+    gap: 25px;
+    justify-content: center;
+    flex-wrap: nowrap;
+    max-width: 480px;
+    width: 90vw;
+  }
+
+  .card-box {
+    flex: 1 1 45%;
+    height: 260px;
+    background: #fff;
+    border-radius: 25px;
+    box-shadow: 0 8px 18px rgba(107, 91, 149, 0.22);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    transition: transform 0.3s ease;
+  }
+
+  .card-box:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 16px 30px rgba(107, 91, 149, 0.35);
+  }
+
+  .card-box img {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 15px;
+    object-fit: contain;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  html, body {
+    overflow-x: hidden;
+  }
+
+  @media (max-width: 375px) {
+    input[type="number"] {
+      font-size: 2rem;
+      padding: 20px 25px;
+    }
+    .card-box {
+      height: 280px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<h1>Card Hand Viewer</h1>
+
+<div class="input-container">
+  <input id="handInput" type="number" min="1" max="999" placeholder="Enter hand number (1-3 digits)" />
+  <div class="error" id="errorMsg"></div>
+</div>
+
+<div class="cards-container" id="cardsContainer"></div>
+
+<script>
+  // Paste the generateHandsDict and helper functions here:
+
+  function createDeck() {
+    const suits = ['h', 'd', 'c', 's'];
+    const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'j', 'q', 'k', 'a'];
+    let deck = [];
+    for (let suit of suits) {
+      for (let rank of ranks) {
+        deck.push(rank + suit);
+      }
+    }
+    return deck;
+  }
+
+  function removeNOccurrences(deck, card, n) {
+    let removedCount = 0;
+    for (let i = deck.length - 1; i >= 0 && removedCount < n; i--) {
+      if (deck[i] === card) {
+        deck.splice(i, 1);
+        removedCount++;
+      }
+    }
+    return deck;
+  }
+
+  function seededShuffle(array, rng) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+  }
+
+  function mulberry32(seed) {
+    return function() {
+      let t = seed += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+  }
+
+  function generateHandsDict(seedStr = 'default-seed') {
+    const decksCount = 10;
+    let combinedDeck = [];
+
+    for (let i = 0; i < decksCount; i++) {
+      combinedDeck = combinedDeck.concat(createDeck());
+    }
+
+    const excludeCards = ['5d', '5s', 'kh', 'jh', 'qh'];
+    combinedDeck = combinedDeck.filter(card => !excludeCards.includes(card));
+
+    const countCard = (deck, card) => deck.filter(c => c === card).length;
+    let count10h = countCard(combinedDeck, '10h');
+    let countAh = countCard(combinedDeck, 'ah');
+
+    if (count10h > 5) combinedDeck = removeNOccurrences(combinedDeck, '10h', count10h - 5);
+    if (countAh > 5) combinedDeck = removeNOccurrences(combinedDeck, 'ah', countAh - 5);
+
+    function extractCards(deck, card, count) {
+      const extracted = [];
+      for (let i = 0; i < deck.length && extracted.length < count;) {
+        if (deck[i] === card) {
+          extracted.push(deck.splice(i, 1)[0]);
+        } else {
+          i++;
+        }
+      }
+      return extracted;
+    }
+
+    const tenHeartsCards = extractCards(combinedDeck, '10h', 5);
+    const aceHeartsCards = extractCards(combinedDeck, 'ah', 5);
+
+    const specialHands = [];
+    for (let i = 0; i < 5; i++) {
+      specialHands.push([tenHeartsCards[i], aceHeartsCards[i]]);
+    }
+
+    // Convert seed string to number
+    let seedNum = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      seedNum = (seedNum * 31 + seedStr.charCodeAt(i)) >>> 0;
+    }
+    const rng = mulberry32(seedNum);
+
+    combinedDeck = seededShuffle(combinedDeck, rng);
+
+    const remainingHands = [];
+    while (combinedDeck.length >= 2) {
+      remainingHands.push([combinedDeck.pop(), combinedDeck.pop()]);
+    }
+    if (combinedDeck.length === 1) {
+      remainingHands.push([combinedDeck.pop()]);
+    }
+
+    let allHands = specialHands.concat(remainingHands);
+    allHands = seededShuffle(allHands, rng);
+
+    const handsDict = {};
+    allHands.forEach((hand, idx) => {
+      handsDict[`Hand ${idx + 1}`] = hand;
+    });
+
+    return handsDict;
+  }
+
+  // --- UI Logic ---
+
+  const handInput = document.getElementById('handInput');
+  const errorMsg = document.getElementById('errorMsg');
+  const cardsContainer = document.getElementById('cardsContainer');
+
+  // Generate handsDict once with a fixed seed
+  const handsDict = generateHandsDict('my-fixed-seed-123');
+
+  function createCardImage(cardName) {
+    const img = document.createElement('img');
+    img.src = `images/${cardName}.png`;
+    img.alt = cardName;
+    img.onerror = () => {
+      img.src = 'https://via.placeholder.com/140x200?text=No+Image';
+    };
+    return img;
+  }
+
+  function showHand(handNumber) {
+    errorMsg.textContent = '';
+    cardsContainer.innerHTML = '';
+
+    if (!handNumber || handNumber < 1 || handNumber > Object.keys(handsDict).length) {
+      errorMsg.textContent = `Please enter a valid hand number between 1 and ${Object.keys(handsDict).length}.`;
+      return;
+    }
+
+    const handKey = `Hand ${handNumber}`;
+    const cards = handsDict[handKey];
+
+    if (!cards) {
+      errorMsg.textContent = `Hand ${handNumber} not found.`;
+      return;
+    }
+
+    cards.forEach(card => {
+      const cardBox = document.createElement('div');
+      cardBox.className = 'card-box';
+      cardBox.appendChild(createCardImage(card));
+      cardsContainer.appendChild(cardBox);
+    });
+  }
+
+  handInput.addEventListener('input', () => {
+    const val = parseInt(handInput.value, 10);
+    showHand(val);
+  });
+</script>
+
+</body>
+</html>
